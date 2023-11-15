@@ -1,0 +1,246 @@
+
+
+create table itens
+(
+chave character varying(400)
+,chave2	character varying(400)
+,starttime date
+,endtime   date
+,indices character varying(20)
+,constraint primarykey02 primary key (chave,chave2)
+)
+
+
+
+create table itens_detalhados
+(
+chave character varying(400)
+,chave2	character varying(400)
+,produto smallint
+,empresa int
+,constraint primarykey01 primary key (chave,chave2,produto)
+)
+
+
+
+
+
+--itens_detalhados
+--898993
+
+INSERT INTO itens_detalhados (chave, chave2, produto, empresa)
+SELECT
+    md5(random()::text),            -- Gera uma chave aleatória usando MD5
+    md5(random()::text),            -- Gera outra chave aleatória usando MD5
+    ('12'),     -- Valor aleatório para produto (de 1 a 1000)
+    ('13')    -- Valor aleatório para empresa (de 1 a 10000)
+FROM
+    generate_series(1, 6000000);    -- Gera uma série de 6 milhões de linhas
+	
+	
+	
+
+	insert into itens (chave,chave2,starttime,endtime,indices)
+	select 
+	 chave
+	,chave2
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as starttime
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as endtime
+	, '1' as indices
+	from itens_detalhados a
+	limit 2000000	
+	
+	
+	insert into itens (chave,chave2,starttime,endtime,indices)
+	select 
+	 chave
+	,chave2
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as starttime
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as endtime
+	, '2' as indices
+	from itens_detalhados a
+	where  not  exists
+	(
+	select * from itens b
+		where a.chave = b.chave
+		and   a.chave2 = b.chave2
+	)
+	limit 2000000
+	
+	
+	
+
+
+
+
+
+
+
+--itens_detalhados
+--898993
+
+INSERT INTO itens_detalhados (chave, chave2, produto, empresa)
+SELECT
+    md5(random()::text),            -- Gera uma chave aleatória usando MD5
+    md5(random()::text),            -- Gera outra chave aleatória usando MD5
+    ('12'),     -- Valor aleatório para produto (de 1 a 1000)
+    ('13')    -- Valor aleatório para empresa (de 1 a 10000)
+FROM
+    generate_series(1, 1000000);    -- Gera uma série de 6 milhões de linhas
+	
+
+
+
+	insert into itens (chave,chave2,starttime,endtime,indices)
+	select 
+	 chave
+	,chave2
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as starttime
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as endtime
+	, '3' as indices
+	from itens_detalhados a
+	where  produto = '12'
+	and empresa = '13'
+	limit 500000	
+	
+	
+	insert into itens (chave,chave2,starttime,endtime,indices)
+	select 
+	 chave
+	,chave2
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as starttime
+	, timestamp '2022-01-01' + (random() * (timestamp '2023-12-01' - timestamp '2022-01-01'))::interval as endtime
+	, '4' as indices
+	from itens_detalhados a
+	where  not  exists
+	(
+	select * from itens b
+		where a.chave = b.chave
+		and   a.chave2 = b.chave2
+	)
+	and produto = '12'
+	and empresa = '13'
+	limit 500000
+	
+
+
+
+
+
+
+
+
+explain (format json, verbose,analyze)
+select distinct 
+r.indices
+from itens r
+inner join itens_detalhados o
+on r.chave = o.chave
+where 
+o.produto = '13'
+and o.empresa = '1'
+and not current_date between r.starttime and r.endtime
+
+
+
+
+
+
+
+
+
+;with cte
+as
+(
+select  
+r.indices
+,row_number() over (partition by indices order by starttime) as rnk
+from itens r
+inner join itens_detalhados o
+on r.chave = o.chave
+where 
+o.produto = '13'
+and o.empresa = '1'
+and not current_date between r.starttime and r.endtime
+)
+select indices from cte 
+where rnk = 1 
+
+select distinct 
+indices
+from mat_view vw
+where 
+vw.produto = '13'
+and vw.empresa = '1'
+and not current_date between vw.starttime and vw.endtime
+and rnk  = 1 
+
+
+
+create materialized view mat_view
+as
+select  
+r.indices
+,produto
+,empresa
+,starttime
+,endtime
+,row_number () over (partition by r.indices,produto,empresa,starttime,endtime order by starttime ) as rnk 
+from itens r
+inner join itens_detalhados o
+on r.chave = o.chave
+
+
+
+
+create index ix_dba4 on mat_view (produto,empresa,rnk,starttime,endtime) include (indices)
+
+
+
+select
+count(indices)
+from itens r
+inner join itens_detalhados o
+on r.chave = o.chave
+where 
+o.produto = '13'
+and o.empresa = '1'
+and  not current_date between r.starttime and r.endtime
+
+select 
+count(1)
+from mat_view vw
+where 
+vw.produto = '13'
+and vw.empresa = '1'
+and not current_date between vw.starttime and vw.endtime
+and rnk  = 1 
+
+
+
+
+
+
+
+
+
+vacuum  analyze itens_detalhados 
+
+
+select count(1) from itens_detalhados
+select current_Date
+/*
+select 1/0
+
+drop index ix_dba 
+
+drop index ix_dba2 
+
+create index ix_dba on itens (starttime,endtime,chave) include (indices)
+
+create index ix_dba2 on itens_detalhados (produto,empresa,chave)
+*/
+
+
+
+	
